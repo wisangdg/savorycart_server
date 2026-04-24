@@ -1,16 +1,40 @@
+/**
+ * @module auth/controller
+ * @description Controller untuk autentikasi dan manajemen sesi pengguna
+ */
+
 const User = require("../user/model.js");
 const bcrypt = require("bcrypt");
 const passport = require("passport");
 const jwt = require("jsonwebtoken");
 const config = require("../config.js");
 const { getToken } = require("../../utils/index.js");
+const tokenService = require("./token.service.js");
 
+/**
+ * @function register
+ * @description Mendaftarkan pengguna baru ke sistem
+ * @param {Object} req - Express request object
+ * @param {Object} req.body - Data pengguna yang akan didaftarkan
+ * @param {string} req.body.email - Email pengguna
+ * @param {string} req.body.password - Password pengguna (akan di-hash)
+ * @param {string} req.body.name - Nama pengguna
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} Data pengguna yang berhasil didaftarkan (tanpa password)
+ */
 const register = async (req, res, next) => {
   try {
     const payload = req.body;
+
     let user = new User(payload);
     await user.save();
-    return res.json(user);
+    const { password, ...userWithoutPassword } = user.toObject();
+    return res.json({
+      error: 0,
+      message: "Register successfully",
+      data: userWithoutPassword,
+    });
   } catch (err) {
     if (err && err.name === "ValidationError") {
       return res.json({
@@ -23,6 +47,14 @@ const register = async (req, res, next) => {
   }
 };
 
+/**
+ * @function localStrategy
+ * @description Strategi autentikasi lokal untuk Passport.js
+ * @param {string} email - Email pengguna
+ * @param {string} password - Password pengguna (belum di-hash)
+ * @param {Function} done - Callback function dari Passport.js
+ * @returns {Function} Panggilan ke callback done dengan user jika berhasil
+ */
 const localStrategy = async (email, password, done) => {
   try {
     let user = await User.findOne({ email }).select(
@@ -39,65 +71,205 @@ const localStrategy = async (email, password, done) => {
   return done();
 };
 
+/**
+ * @function login
+ * @description Melakukan login pengguna dan membuat token akses
+ * @param {Object} req - Express request object
+ * @param {Object} req.body - Data login
+ * @param {string} req.body.email - Email pengguna
+ * @param {string} req.body.password - Password pengguna
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} Data pengguna dan token akses
+ */
 const login = (req, res, next) => {
   passport.authenticate("local", async function (err, user) {
     if (err) return next(err);
     if (!user)
       return res.json({ error: 1, message: "email or password incorrect" });
-    let signed = jwt.sign(user, config.secretKey);
 
-    await User.findByIdAndUpdate(user._id, { $push: { token: signed } });
+    try {
+      // Buat payload untuk access token
+      const payload = {
+        _id: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      };
 
-    res.json({
-      message: "Login succesfully",
-      user,
-      token: signed,
-    });
+      const accessToken = tokenService.generateAccessToken(payload);
+
+      const metadata = {
+        userAgent: req.headers["user-agent"],
+        ipAddress: req.ip,
+      };
+      const refreshToken = await tokenService.generateRefreshToken(
+        user._id,
+        metadata
+      );
+
+      res.cookie("refreshToken", refreshToken.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production", // Gunakan HTTPS di production
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 hari dalam milidetik
+        path: "/auth/refresh-token", // Hanya dapat diakses oleh endpoint refresh token
+      }); // Kirim response dengan access token
+      res.json({
+        error: 0,
+        message: "Login successfully",
+        data: {
+          user, // Mengembalikan data user (tanpa password dari localStrategy)
+          token: accessToken,
+        },
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      return res.status(500).json({
+        error: 1,
+        message: "Internal server error during login",
+      });
+    }
   })(req, res, next);
 };
 
+/**
+ * @function logout
+ * @description Melakukan logout pengguna, menghapus token akses dan refresh token
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} Pesan sukses logout
+ */
 const logout = async (req, res, next) => {
   try {
-    let token = getToken(req);
+    // Get access token from Authorization header
+    const accessToken = getToken(req);
 
-    if (!token) {
+    // Get refresh token from cookies
+    const refreshToken = req.cookies?.refreshToken;
+
+    if (!accessToken && !refreshToken) {
       return res.json({
         error: 1,
-        message: "No Token Provided",
+        message: "No tokens provided",
       });
     }
 
-    let user = await User.findOneAndUpdate(
-      { token: { $in: [token] } },
-      { $pull: { token: token } },
-      { useFindAndModify: false }
-    );
-
-    if (!user) {
-      return res.json({
-        error: 1,
-        message: "No User Found",
-      });
+    // Blacklist the access token if it exists
+    if (accessToken) {
+      try {
+        const decoded = jwt.verify(accessToken, config.secretKey, {
+          ignoreExpiration: true,
+        });
+        const expiryDate = new Date(decoded.exp * 1000); // Convert to milliseconds
+        await tokenService.blacklistToken(accessToken, decoded._id, expiryDate);
+      } catch (tokenError) {
+        console.error("Error decoding token during logout:", tokenError);
+        // Continue with logout even if token decoding fails
+      }
     }
+
+    // Revoke the refresh token if it exists
+    if (refreshToken) {
+      await tokenService.revokeRefreshToken(refreshToken);
+    }
+
+    // Clear the refresh token cookie
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/auth/refresh-token",
+    });
 
     return res.json({
       error: 0,
       message: "Logout berhasil",
     });
   } catch (err) {
+    console.error("Logout error:", err);
     next(err);
   }
 };
 
-const me = (req, res, next) => {
+/**
+ * @function me
+ * @description Mendapatkan data pengguna yang sedang login
+ * @param {Object} req - Express request object
+ * @param {Object} req.user - Data pengguna dari middleware decodeToken
+ * @param {Object} res - Express response object
+ * @returns {Object} Data pengguna yang sedang login
+ */
+const me = (req, res) => {
   if (!req.user) {
-    return res.json({
-      err: 1,
-      message: "You re not login or expired",
+    return res.status(401).json({
+      error: 1,
+      message: "You are not logged in or session expired",
     });
   }
 
-  return res.json(req.user);
+  return res.json({
+    error: 0,
+    message: "User data retrieved successfully",
+    data: req.user,
+  });
+};
+
+/**
+ * @function refreshToken
+ * @description Endpoint untuk memperbarui access token menggunakan refresh token
+ * @param {Object} req - Express request object
+ * @param {Object} req.cookies - Cookies dari request
+ * @param {string} req.cookies.refreshToken - Refresh token dari cookie
+ * @param {Object} res - Express response object
+ * @returns {Object} Access token baru dan data pengguna
+ */
+const refreshToken = async (req, res) => {
+  try {
+    // Dapatkan refresh token dari cookie
+    const refreshTokenStr = req.cookies?.refreshToken;
+
+    if (!refreshTokenStr) {
+      return res.status(401).json({
+        error: 1,
+        message: "Refresh token not found",
+      });
+    }
+
+    // Perbarui access token
+    const result = await tokenService.refreshAccessToken(refreshTokenStr);
+
+    if (!result) {
+      // Hapus cookie jika refresh token tidak valid
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/auth/refresh-token",
+      });
+      return res.status(401).json({
+        error: 1,
+        message: "Invalid or expired refresh token",
+      });
+    }
+
+    // Kirim access token baru
+    return res.json({
+      error: 0,
+      message: "Token refreshed successfully",
+      data: {
+        token: result.accessToken,
+        user: result.user,
+      },
+    });
+  } catch (error) {
+    console.error("Refresh token error:", error);
+    return res.status(500).json({
+      error: 1,
+      message: "Internal server error during token refresh",
+    });
+  }
 };
 
 module.exports = {
@@ -106,4 +278,5 @@ module.exports = {
   login,
   logout,
   me,
+  refreshToken,
 };

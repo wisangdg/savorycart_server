@@ -27,14 +27,11 @@ const userSchema = Schema(
       required: [true, "Password harus diisi"],
       maxlength: [255, "Panjang password maksimal 255 karakter"],
     },
-
     role: {
       type: String,
       enum: ["user", "admin"],
       default: "user",
     },
-
-    token: [String],
   },
   { timestamps: true }
 );

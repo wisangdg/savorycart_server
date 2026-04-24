@@ -3,17 +3,10 @@ const CartItem = require("../cart-item/model.js");
 
 const store = async (req, res, next) => {
   try {
-    const cartItem = req.body[0];
-    const _id = cartItem?.product?._id;
-    console.log("Product ID:", _id);
-    console.log("reqbody", req.body);
-
-    if (!_id) {
-      return res.status(400).json({
-        error: 1,
-        message: "Product ID is required",
-      });
-    }
+    // Gunakan data yang sudah divalidasi oleh middleware
+    const { productId: _id, qty } = req.validatedCartData;
+    console.log("Using validated data - Product ID:", _id);
+    console.log("Using validated data - Quantity:", qty);
 
     // Cek apakah produk ada di database
     const product = await Product.findById(_id); // Menggunakan _id
@@ -35,8 +28,9 @@ const store = async (req, res, next) => {
       existingCartItem.qty += 1;
       await existingCartItem.save();
       return res.status(200).json({
+        error: 0,
         message: "Quantity updated in cart",
-        cartItem: existingCartItem,
+        data: existingCartItem,
       });
     } else {
       // Jika belum ada, tambahkan item baru ke keranjang
@@ -51,8 +45,9 @@ const store = async (req, res, next) => {
 
       await newCartItem.save();
       return res.status(201).json({
+        error: 0,
         message: "Product added to cart",
-        cartItem: newCartItem,
+        data: newCartItem,
       });
     }
   } catch (err) {
@@ -70,43 +65,41 @@ const store = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const { items } = req.body;
+    // Gunakan data yang sudah divalidasi oleh middleware
+    const { productId, qty } = req.validatedCartData;
+    console.log("Using validated data for update - Product ID:", productId);
+    console.log("Using validated data for update - Quantity:", qty);
 
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 1, message: "Invalid input" });
-    }
+    const existingCartItem = await CartItem.findOne({
+      user: req.user._id,
+      product: productId,
+    });
 
-    for (const item of items) {
-      const { product, qty } = item;
-
-      if (!product || !product._id) {
-        return res
-          .status(400)
-          .json({ error: 1, message: "Product ID is required" });
+    if (existingCartItem) {
+      existingCartItem.qty += qty;
+      if (existingCartItem.qty <= 0) {
+        await existingCartItem.deleteOne();
+      } else {
+        await existingCartItem.save();
       }
-
-      const existingCartItem = await CartItem.findOne({
-        user: req.user._id,
-        product: product._id,
-      });
-
-      if (existingCartItem) {
-        existingCartItem.qty += qty;
-        if (existingCartItem.qty <= 0) {
-          await existingCartItem.remove();
-        } else {
-          await existingCartItem.save();
-        }
-      } else if (qty > 0) {
-        const newCartItem = new CartItem({
-          product: product._id,
-          qty,
-          price: product.price,
-          image_url: product.image_url,
-          user: req.user._id,
+    } else if (qty > 0) {
+      // Cek apakah produk ada di database
+      const product = await Product.findById(productId);
+      if (!product) {
+        return res.status(404).json({
+          error: 1,
+          message: "Product not found",
         });
-        await newCartItem.save();
       }
+
+      const newCartItem = new CartItem({
+        product: productId,
+        qty,
+        price: product.price,
+        image_url: product.image_url,
+        user: req.user._id,
+      });
+      await newCartItem.save();
     }
 
     const updatedCartItems = await CartItem.find({

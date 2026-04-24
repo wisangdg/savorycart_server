@@ -1,2 +1,6 @@
 node_modules/
 .env
+
+# Windows NTFS alternate data stream artifacts (download security zone)
+*:*Zone.Identifier
+*Zone.Identifier

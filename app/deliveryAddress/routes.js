@@ -1,17 +1,31 @@
 const { police_check } = require("../../middlewares/index.js");
 const deliveryAddressController = require("./controller.js");
+const {
+  addressValidator,
+  idValidator,
+} = require("../../middlewares/validator");
 
 const router = require("express").Router();
 
 router.post(
   "/delivery-addresses",
   police_check("create", "DeliveryAddress"),
+  addressValidator,
   deliveryAddressController.store
 );
 
-router.put("/delivery-addresses/:id", deliveryAddressController.update);
+router.put(
+  "/delivery-addresses/:id",
+  idValidator,
+  addressValidator,
+  deliveryAddressController.update
+);
 
-router.delete("/delivery-addresses/:id", deliveryAddressController.destroy);
+router.delete(
+  "/delivery-addresses/:id",
+  idValidator,
+  deliveryAddressController.destroy
+);
 
 router.get(
   "/delivery-addresses",

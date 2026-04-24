@@ -1,10 +1,18 @@
-var createError = require("http-errors");
-var express = require("express");
-var path = require("path");
-var cookieParser = require("cookie-parser");
-var logger = require("morgan");
+const express = require("express");
+const path = require("path");
+const cookieParser = require("cookie-parser");
+const morganLogger = require("morgan");
 const cors = require("cors");
+const config = require("./config");
 const { decodeToken } = require("./middlewares");
+const imageOptimizer = require("./middlewares/imageOptimizer");
+const { sanitizeRequest } = require("./utils/sanitizer");
+const {
+  notFoundHandler,
+  errorHandler,
+  handleUncaughtExceptions,
+} = require("./middlewares/errorHandler");
+const logger = require("./utils/logger");
 const productRoute = require("./app/product/routes.js");
 const categoryRoute = require("./app/category/routes.js");
 const tagRoute = require("./app/tag/routes.js");
@@ -13,85 +21,122 @@ const deliveryAddressRoute = require("./app/deliveryAddress/routes.js");
 const cartRoute = require("./app/cart/routes.js");
 const orderRoute = require("./app/order/routes.js");
 const invoiceRoute = require("./app/invoice/routes.js");
+const errorRoute = require("./app/error/routes.js");
 const app = express();
+const mongoose = require("mongoose");
 
-app.use(cors());
+// Konfigurasi CORS yang mendukung credentials
+app.use(
+  cors({
+    origin: [
+      config.frontendUrl,
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "http://localhost:4173",
+      "http://127.0.0.1:4173",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+    ],
+    exposedHeaders: ["Content-Disposition"],
+    credentials: true,
+    maxAge: 86400, // Cache preflight request selama 24 jam
+    optionsSuccessStatus: 200, // untuk browser lama
+  })
+);
 
-// cors({
-//   origin: process.env.FRONTEND_URL || "*",
-//   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-//   allowedHeaders: ["Content-Type", "Authorization"],
-//   credentials: true,
-// })
+// Tambahkan middleware untuk handle preflight requests
+app.options("*", cors());
 
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header(
-    "Access-Control-Allow-Methods",
-    "GET, PUT, POST, DELETE, OPTIONS, PATCH"
-  );
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
+// Middleware removed as morgan and custom logger already handle this
 
-  if (req.method === "OPTIONS") {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
-});
+// Inisialisasi penanganan uncaught exceptions
+handleUncaughtExceptions();
 
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  console.log("Origin:", req.headers.origin);
-  console.log("Headers:", JSON.stringify(req.headers, null, 2));
-  next();
-});
-
-app.use(logger("dev"));
+// Setup logging
+app.use(morganLogger("dev"));
+app.use(logger.requestLogger);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(cookieParser(config.secretKey)); // Signed cookies dengan secret key
+
+// Sanitasi input untuk mencegah XSS
+app.use(sanitizeRequest);
+
+// Apply image optimization middleware before static files
+app.use(imageOptimizer);
+
+// Serve static files
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    maxAge: "1d", // Cache static assets for 1 day
+    etag: true,
+    lastModified: true,
+  })
+);
+
+// Lightweight /api/ping health-check BEFORE auth & DB dependent middlewares
+// so that the frontend can still know the server process is alive even if DB is down
+app.get("/api/ping", function (req, res) {
+  res.json({
+    status: "ok",
+    message: "Server is running",
+    db: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Simple DB health guard – if database not connected yet, short‑circuit data routes
+function dbHealthGuard(req, res, next) {
+  // readyState: 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+  const state = mongoose.connection.readyState;
+  if (state === 1) return next();
+  if (state === 2) {
+    return res.status(503).json({
+      error: 1,
+      code: "DB_CONNECTING",
+      message: "Database is still connecting, please retry shortly",
+    });
+  }
+  return res.status(503).json({
+    error: 1,
+    code: "DB_UNAVAILABLE",
+    message: "Database is not available",
+  });
+}
+
 app.use(decodeToken);
 
 app.use("/auth", authRoute);
-app.use("/api", productRoute);
-app.use("/api", categoryRoute);
-app.use("/api", tagRoute);
-app.use("/api", deliveryAddressRoute);
-app.use("/api", cartRoute);
-app.use("/api", orderRoute);
-app.use("/api", invoiceRoute);
+// Apply DB health guard only to routes that actually need DB access
+app.use("/api", dbHealthGuard, productRoute);
+app.use("/api", dbHealthGuard, categoryRoute);
+app.use("/api", dbHealthGuard, tagRoute);
+app.use("/api", dbHealthGuard, deliveryAddressRoute);
+app.use("/api", dbHealthGuard, cartRoute);
+app.use("/api", dbHealthGuard, orderRoute);
+app.use("/api", dbHealthGuard, invoiceRoute);
+app.use("/api", errorRoute);
 
 //home
-app.use("/", function (req, res) {
+app.get("/", function (req, res) {
   res.json({
     message: "Eduwork API Service",
     status: "Running",
   });
 });
 
-// catch 404 and forward to error handler
-app.use(function (req, res, next) {
-  next(createError(404));
-});
+// (moved the /api/ping endpoint above so it stays functional even if DB/auth fail)
 
-// error handler
-app.use((err, req, res, next) => {
-  if (err.timeout) {
-    return res.status(504).json({
-      error: "Server timeout",
-      message: "The request took too long to process",
-    });
-  }
+// Penanganan 404 (route tidak ditemukan)
+app.use(notFoundHandler);
 
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    error: err.message || "Internal Server Error",
-    status: err.status || 500,
-  });
-});
+// Penanganan error global
+app.use(errorHandler);
 
 module.exports = app;

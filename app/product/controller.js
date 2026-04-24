@@ -8,7 +8,6 @@ const Tag = require("../tag/model.js");
 const store = async (req, res, next) => {
   try {
     let payload = req.body;
-    console.log("Payload received:", payload);
 
     if (payload.category) {
       let category = await Category.findOne({
@@ -25,7 +24,6 @@ const store = async (req, res, next) => {
       let tags = await Tag.find({
         name: { $in: payload.tags.map((tag) => new RegExp(tag, "i")) },
       });
-      console.log("Tags found:", tags);
       if (tags.length) {
         payload.tags = tags.map((tag) => tag._id);
       } else {
@@ -52,10 +50,11 @@ const store = async (req, res, next) => {
         try {
           let product = new Product({ ...payload, image_url: filename });
           await product.save();
-          console.log("Product saved:", product);
           return res.json(product);
         } catch (err) {
-          fs.unlinkSync(target_path);
+          if (fs.existsSync(target_path)) {
+            fs.unlinkSync(target_path);
+          }
           if (err && err.name === "ValidationError") {
             return res.json({
               error: 1,
@@ -73,7 +72,6 @@ const store = async (req, res, next) => {
     } else {
       let product = new Product(payload);
       await product.save();
-      console.log("Product saved:", product);
       return res.json(product);
     }
   } catch (err) {
@@ -116,8 +114,6 @@ const update = async (req, res, next) => {
       }
     }
 
-    console.log("Payload received for update:", payload);
-
     if (req.file) {
       let tmp_path = req.file.path;
       let originalExt = req.file.originalname.split(".").pop();
@@ -152,10 +148,11 @@ const update = async (req, res, next) => {
             { ...payload, image_url: filename },
             { new: true, runValidators: true }
           );
-          console.log("Product updated:", product);
           return res.json(product);
         } catch (err) {
-          fs.unlinkSync(target_path);
+          if (fs.existsSync(target_path)) {
+            fs.unlinkSync(target_path);
+          }
           if (err && err.name === "ValidationError") {
             return res.status(400).json({
               error: 1,
@@ -178,7 +175,6 @@ const update = async (req, res, next) => {
       if (!product) {
         return res.status(404).json({ error: 1, message: "Product not found" });
       }
-      console.log("Product updated:", product);
       return res.json(product);
     }
   } catch (err) {
@@ -199,7 +195,6 @@ const index = async (req, res, next) => {
     skip = parseInt(skip) || 0;
     limit = parseInt(limit) || 12;
     let page = parseInt(req.query.page) || 1;
-    console.log("Query page:", page);
 
     let criteria = {};
     if (q.length) {
@@ -224,7 +219,7 @@ const index = async (req, res, next) => {
         criteria.tags = { $in: tagsResult.map((tag) => tag._id) };
       }
     }
-    console.log(criteria);
+    
     let count = await Product.find(criteria).countDocuments();
     let products = await Product.find(criteria)
       .skip(skip)

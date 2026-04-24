@@ -1,0 +1,80 @@
+{
+  "timestamp": "2025-08-19T04:46:17.308Z",
+  "level": "error",
+  "source": "client",
+  "error": "Error: useLocation() may be used only in the context of a  component.",
+  "url": "http://localhost:5174/",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+  "ip": "::ffff:127.0.0.1",
+  "user": "unauthenticated"
+}
+{
+  "timestamp": "2025-08-19T04:51:56.434Z",
+  "level": "error",
+  "source": "client",
+  "error": "Error: useLocation() may be used only in the context of a  component.",
+  "url": "http://localhost:5173/",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+  "ip": "::ffff:127.0.0.1",
+  "user": "unauthenticated"
+}
+{
+  "timestamp": "2025-08-19T04:56:12.934Z",
+  "level": "error",
+  "source": "client",
+  "error": "Error: useLocation() may be used only in the context of a  component.",
+  "url": "http://localhost:5173/",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+  "ip": "::ffff:127.0.0.1",
+  "user": "unauthenticated"
+}
+{
+  "timestamp": "2025-08-19T04:56:15.980Z",
+  "level": "error",
+  "source": "client",
+  "error": "Error: useLocation() may be used only in the context of a  component.",
+  "url": "http://localhost:5173/",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+  "ip": "::ffff:127.0.0.1",
+  "user": "unauthenticated"
+}
+{
+  "timestamp": "2025-08-19T04:56:17.471Z",
+  "level": "error",
+  "source": "client",
+  "error": "Error: useLocation() may be used only in the context of a  component.",
+  "url": "http://localhost:5173/",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+  "ip": "::ffff:127.0.0.1",
+  "user": "unauthenticated"
+}
+{
+  "timestamp": "2025-08-19T04:56:18.545Z",
+  "level": "error",
+  "source": "client",
+  "error": "Error: useLocation() may be used only in the context of a  component.",
+  "url": "http://localhost:5173/",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+  "ip": "::ffff:127.0.0.1",
+  "user": "unauthenticated"
+}
+{
+  "timestamp": "2025-08-19T04:56:19.417Z",
+  "level": "error",
+  "source": "client",
+  "error": "Error: useLocation() may be used only in the context of a  component.",
+  "url": "http://localhost:5173/",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+  "ip": "::ffff:127.0.0.1",
+  "user": "unauthenticated"
+}
+{
+  "timestamp": "2025-08-19T04:57:02.473Z",
+  "level": "error",
+  "source": "client",
+  "error": "Error: useLocation() may be used only in the context of a  component.",
+  "url": "http://localhost:5175/",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+  "ip": "::ffff:127.0.0.1",
+  "user": "unauthenticated"
+}
