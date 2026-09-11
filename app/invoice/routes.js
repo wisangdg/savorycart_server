@@ -3,15 +3,15 @@ const invoiceController = require("./controller");
 const { police_check } = require("../../middlewares/index.js");
 
 router.get(
-  "/invoices/:order_id",
-  police_check("view", "Invoice"),
-  invoiceController.show
+	"/invoices/:order_id",
+	police_check("read", "Invoice"),
+	invoiceController.show,
 );
 
 router.post(
-  "/invoices",
-  police_check("create", "Invoice"),
-  invoiceController.create
+	"/invoices",
+	police_check("create", "Invoice"),
+	invoiceController.create,
 );
 
 module.exports = router;

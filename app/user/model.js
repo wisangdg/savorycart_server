@@ -4,65 +4,75 @@ const AutoIncrement = require("mongoose-sequence")(mongoose);
 const bcrypt = require("bcrypt");
 
 const userSchema = Schema(
-  {
-    full_name: {
-      type: String,
-      minlength: [3, "Panjang nama minimal 3 karakter"],
-      maxlength: [255, "Panjang nama harus antara 3-255"],
-      required: [true, "Nama harus diisi"],
-    },
+	{
+		full_name: {
+			type: String,
+			minlength: [3, "Panjang nama minimal 3 karakter"],
+			maxlength: [255, "Panjang nama harus antara 3-255"],
+			required: [true, "Nama harus diisi"],
+		},
 
-    customer_id: {
-      type: Number,
-    },
+		customer_id: {
+			type: Number,
+		},
 
-    email: {
-      type: String,
-      required: [true, "Email harus diisi"],
-      maxlength: [255, "Panjang email maksimal 255 karakter"],
-    },
+		email: {
+			type: String,
+			required: [true, "Email harus diisi"],
+			maxlength: [255, "Panjang email maksimal 255 karakter"],
+			lowercase: true,
+			trim: true,
+		},
 
-    password: {
-      type: String,
-      required: [true, "Password harus diisi"],
-      maxlength: [255, "Panjang password maksimal 255 karakter"],
-    },
-    role: {
-      type: String,
-      enum: ["user", "admin"],
-      default: "user",
-    },
-  },
-  { timestamps: true }
+		password: {
+			type: String,
+			required: [true, "Password harus diisi"],
+			maxlength: [255, "Panjang password maksimal 255 karakter"],
+			select: false,
+		},
+		role: {
+			type: String,
+			enum: ["user", "admin"],
+			default: "user",
+		},
+	},
+	{ timestamps: true },
 );
 
 userSchema.path("email").validate(
-  function (value) {
-    const EMAIL_RE = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
-    return EMAIL_RE.test(value);
-  },
-  (attr) => `${attr.value} harus merupakan email yang valid`
+	function (value) {
+		const EMAIL_RE = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
+		return EMAIL_RE.test(value);
+	},
+	(attr) => `${attr.value} harus merupakan email yang valid`,
 );
 
 userSchema.path("email").validate(
-  async function (value) {
-    try {
-      //lakukan pencarian ke _collection_ user berdasarkan 'email'
-      const count = await this.model("User").countDocuments({ email: value });
-      //jika false maka validasi gagal, jika true maka validasi berhasil
-      return !count;
-    } catch (err) {
-      throw err;
-    }
-  },
-  (attr) => `${attr.value} sudah terdaftar`
+	async function (value) {
+		try {
+			//lakukan pencarian ke _collection_ user berdasarkan 'email'
+			const count = await this.model("User").countDocuments({
+				email: value,
+			});
+			//jika false maka validasi gagal, jika true maka validasi berhasil
+			return !count;
+		} catch (err) {
+			throw err;
+		}
+	},
+	(attr) => `${attr.value} sudah terdaftar`,
 );
 
 const HASH_ROUND = 10;
 userSchema.pre("save", function (next) {
-  this.password = bcrypt.hashSync(this.password, HASH_ROUND);
-  next();
+	// Hash hanya saat password baru/berubah, agar save() lain tidak re-hash.
+	if (!this.isModified("password")) return next();
+	this.password = bcrypt.hashSync(this.password, HASH_ROUND);
+	next();
 });
+
+// Email dinormalisasi (lowercase/trim) dan unik di level database.
+userSchema.index({ email: 1 }, { unique: true });
 
 userSchema.plugin(AutoIncrement, { inc_field: "customer_id" });
 

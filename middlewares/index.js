@@ -6,90 +6,107 @@ const { getToken } = require("../utils/index.js");
 const tokenService = require("../app/auth/token.service.js");
 
 const decodeToken = async (req, res, next) => {
-  try {
-    const token = getToken(req);
+	try {
+		// `/auth/logout` dan `/auth/refresh-token` mengelola tokennya sendiri.
+		// Access token yang kedaluwarsa/invalid tidak boleh memblokir keduanya.
+		if (
+			req.originalUrl.startsWith("/auth/logout") ||
+			req.originalUrl.startsWith("/auth/refresh-token")
+		) {
+			return next();
+		}
 
-    if (!token) {
-      // Jika tidak ada token, lanjutkan tanpa user terotentikasi
-      return next();
-    }
+		const token = getToken(req);
 
-    // Periksa apakah token ada di blacklist
-    const isBlacklisted = await tokenService.isTokenBlacklisted(token);
-    if (isBlacklisted) {
-      return res.status(401).json({
-        error: 1,
-        message: "Token has been revoked",
-      });
-    }
+		if (!token) {
+			// Jika tidak ada token, lanjutkan tanpa user terotentikasi
+			return next();
+		}
 
-    // Verifikasi token dan dapatkan payload
-    const payload = jwt.verify(token, config.secretKey);
+		// Periksa apakah token ada di blacklist
+		const isBlacklisted = await tokenService.isTokenBlacklisted(token);
+		if (isBlacklisted) {
+			return res.status(401).json({
+				error: 1,
+				message: "Token has been revoked",
+			});
+		}
 
-    // Cari user berdasarkan ID dari payload token
-    let user = await User.findById(payload._id);
+		// Verifikasi token dan dapatkan payload
+		const payload = jwt.verify(token, config.secretKey);
 
-    if (!user) {
-      // Jika user tidak ditemukan (mungkin dihapus), kirim error
-      return res.status(401).json({
-        error: 1,
-        message: "User not found or Token invalid",
-      });
-    }
+		// Cari user berdasarkan ID dari payload token
+		let user = await User.findById(payload._id);
 
-    // Attach user dan payload ke request
-    req.user = user;
-    req.tokenPayload = payload;
-    return next();
-  } catch (err) {
-    if (err && err.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        // Gunakan status 401 untuk error otentikasi
-        error: 1,
-        message: err.message, // Contoh: 'jwt malformed', 'invalid signature', 'jwt expired'
-      });
-    } else if (err && err.name === "TokenExpiredError") {
-      // Jika token expired, coba cek apakah ada refresh token di cookie
-      if (req.cookies?.refreshToken) {
-        // Redirect ke endpoint refresh token jika ini bukan request ke endpoint tersebut
-        if (!req.originalUrl.includes("/auth/refresh-token")) {
-          return res.status(401).json({
-            error: 1,
-            message: "Token expired",
-            needsRefresh: true,
-          });
-        }
-      }
+		if (!user) {
+			// Jika user tidak ditemukan (mungkin dihapus), kirim error
+			return res.status(401).json({
+				error: 1,
+				message: "User not found or Token invalid",
+			});
+		}
 
-      return res.status(401).json({
-        error: 1,
-        message: "Token expired",
-      });
-    }
-    // Tangani error tak terduga lainnya
-    console.error("Decode token unexpected error:", err);
-    return res.status(500).json({
-      error: 1,
-      message: "Internal Server Error during token decoding",
-    });
-  }
+		// Attach user dan payload ke request
+		req.user = user;
+		req.tokenPayload = payload;
+		return next();
+	} catch (err) {
+		if (err && err.name === "JsonWebTokenError") {
+			return res.status(401).json({
+				// Gunakan status 401 untuk error otentikasi
+				error: 1,
+				message: err.message, // Contoh: 'jwt malformed', 'invalid signature', 'jwt expired'
+			});
+		} else if (err && err.name === "TokenExpiredError") {
+			// Jika token expired, coba cek apakah ada refresh token di cookie
+			if (req.cookies?.refreshToken) {
+				// Redirect ke endpoint refresh token jika ini bukan request ke endpoint tersebut
+				if (!req.originalUrl.includes("/auth/refresh-token")) {
+					return res.status(401).json({
+						error: 1,
+						message: "Token expired",
+						needsRefresh: true,
+					});
+				}
+			}
+
+			return res.status(401).json({
+				error: 1,
+				message: "Token expired",
+			});
+		}
+		// Tangani error tak terduga lainnya
+		console.error("Decode token unexpected error:", err);
+		return res.status(500).json({
+			error: 1,
+			message: "Internal Server Error during token decoding",
+		});
+	}
 };
 
 // Middleware untuk memeriksa hak akses
 function police_check(action, subject) {
-  return function (req, res, next) {
-    let policy = policyFor(req.user);
-    if (!policy.can(action, subject)) {
-      return res.json({
-        error: 1,
-        message: `You are not allowed to ${action} ${subject}`,
-      });
-    }
-    next();
-  };
+	return function (req, res, next) {
+		// 401 bila belum terautentikasi, 403 bila terautentikasi tapi tidak berizin.
+		if (!req.user) {
+			return res.status(401).json({
+				error: 1,
+				message: "You are not authenticated",
+			});
+		}
+
+		let policy = policyFor(req.user);
+		if (!policy.can(action, subject)) {
+			return res.status(403).json({
+				error: 1,
+				message: `You are not allowed to ${action} ${subject}`,
+			});
+		}
+		next();
+	};
 }
 
 module.exports = {
-  decodeToken,
-  police_check,
+	decodeToken,
+	police_check,
 };

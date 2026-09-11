@@ -8,9 +8,9 @@ const { decodeToken } = require("./middlewares");
 const imageOptimizer = require("./middlewares/imageOptimizer");
 const { sanitizeRequest } = require("./utils/sanitizer");
 const {
-  notFoundHandler,
-  errorHandler,
-  handleUncaughtExceptions,
+	notFoundHandler,
+	errorHandler,
+	handleUncaughtExceptions,
 } = require("./middlewares/errorHandler");
 const logger = require("./utils/logger");
 const productRoute = require("./app/product/routes.js");
@@ -27,27 +27,27 @@ const mongoose = require("mongoose");
 
 // Konfigurasi CORS yang mendukung credentials
 app.use(
-  cors({
-    origin: [
-      config.frontendUrl,
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-      "http://localhost:4173",
-      "http://127.0.0.1:4173",
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "Accept",
-      "Origin",
-    ],
-    exposedHeaders: ["Content-Disposition"],
-    credentials: true,
-    maxAge: 86400, // Cache preflight request selama 24 jam
-    optionsSuccessStatus: 200, // untuk browser lama
-  })
+	cors({
+		origin: [
+			config.frontendUrl,
+			"http://localhost:5173",
+			"http://127.0.0.1:5173",
+			"http://localhost:4173",
+			"http://127.0.0.1:4173",
+		],
+		methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+		allowedHeaders: [
+			"Content-Type",
+			"Authorization",
+			"X-Requested-With",
+			"Accept",
+			"Origin",
+		],
+		exposedHeaders: ["Content-Disposition"],
+		credentials: true,
+		maxAge: 86400, // Cache preflight request selama 24 jam
+		optionsSuccessStatus: 200, // untuk browser lama
+	}),
 );
 
 // Tambahkan middleware untuk handle preflight requests
@@ -73,41 +73,41 @@ app.use(imageOptimizer);
 
 // Serve static files
 app.use(
-  express.static(path.join(__dirname, "public"), {
-    maxAge: "1d", // Cache static assets for 1 day
-    etag: true,
-    lastModified: true,
-  })
+	express.static(path.join(__dirname, "public"), {
+		maxAge: "1d", // Cache static assets for 1 day
+		etag: true,
+		lastModified: true,
+	}),
 );
 
 // Lightweight /api/ping health-check BEFORE auth & DB dependent middlewares
 // so that the frontend can still know the server process is alive even if DB is down
 app.get("/api/ping", function (req, res) {
-  res.json({
-    status: "ok",
-    message: "Server is running",
-    db: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
-    timestamp: new Date().toISOString(),
-  });
+	res.json({
+		status: "ok",
+		message: "Server is running",
+		db: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+		timestamp: new Date().toISOString(),
+	});
 });
 
 // Simple DB health guard – if database not connected yet, short‑circuit data routes
 function dbHealthGuard(req, res, next) {
-  // readyState: 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
-  const state = mongoose.connection.readyState;
-  if (state === 1) return next();
-  if (state === 2) {
-    return res.status(503).json({
-      error: 1,
-      code: "DB_CONNECTING",
-      message: "Database is still connecting, please retry shortly",
-    });
-  }
-  return res.status(503).json({
-    error: 1,
-    code: "DB_UNAVAILABLE",
-    message: "Database is not available",
-  });
+	// readyState: 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+	const state = mongoose.connection.readyState;
+	if (state === 1) return next();
+	if (state === 2) {
+		return res.status(503).json({
+			error: 1,
+			code: "DB_CONNECTING",
+			message: "Database is still connecting, please retry shortly",
+		});
+	}
+	return res.status(503).json({
+		error: 1,
+		code: "DB_UNAVAILABLE",
+		message: "Database is not available",
+	});
 }
 
 app.use(decodeToken);
@@ -125,10 +125,10 @@ app.use("/api", errorRoute);
 
 //home
 app.get("/", function (req, res) {
-  res.json({
-    message: "Eduwork API Service",
-    status: "Running",
-  });
+	res.json({
+		message: config.serviceName,
+		status: "Running",
+	});
 });
 
 // (moved the /api/ping endpoint above so it stays functional even if DB/auth fail)

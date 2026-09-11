@@ -78,3 +78,14 @@
   "ip": "::ffff:127.0.0.1",
   "user": "unauthenticated"
 }
+{
+  "timestamp": "2026-09-11T14:11:53.458Z",
+  "level": "error",
+  "method": "GET",
+  "url": "/api/categories",
+  "status": 503,
+  "responseTime": "13ms",
+  "ip": "::1",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+  "user": "unauthenticated"
+}

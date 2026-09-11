@@ -1,6 +1,9 @@
 node_modules/
 .env
 
+# Cache gambar hasil generate (artefak runtime, bukan source)
+public/cache/
+
 # Windows NTFS alternate data stream artifacts (download security zone)
 *:*Zone.Identifier
 *Zone.Identifier
