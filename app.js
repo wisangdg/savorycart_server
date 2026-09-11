@@ -25,33 +25,53 @@ const errorRoute = require("./app/error/routes.js");
 const app = express();
 const mongoose = require("mongoose");
 
-// Konfigurasi CORS yang mendukung credentials
-app.use(
-	cors({
-		origin: [
-			config.frontendUrl,
-			"http://localhost:5173",
-			"http://127.0.0.1:5173",
-			"http://localhost:4173",
-			"http://127.0.0.1:4173",
-		],
-		methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-		allowedHeaders: [
-			"Content-Type",
-			"Authorization",
-			"X-Requested-With",
-			"Accept",
-			"Origin",
-		],
-		exposedHeaders: ["Content-Disposition"],
-		credentials: true,
-		maxAge: 86400, // Cache preflight request selama 24 jam
-		optionsSuccessStatus: 200, // untuk browser lama
-	}),
-);
+// Konfigurasi CORS yang mendukung credentials dan domain Vercel
+const allowedOrigins = [
+	config.frontendUrl,
+	"https://eduwork-studi-kasus-front-end.vercel.app",
+	"http://localhost:5173",
+	"http://127.0.0.1:5173",
+	"http://localhost:4173",
+	"http://127.0.0.1:4173",
+	"http://localhost:3000",
+	"http://localhost:3004",
+];
 
-// Tambahkan middleware untuk handle preflight requests
-app.options("*", cors());
+const corsOptions = {
+	origin: function (origin, callback) {
+		// Izinkan request tanpa origin (seperti curl, mobile app, server-to-server)
+		if (!origin) return callback(null, true);
+
+		// Izinkan jika ada di list eksplisit
+		if (allowedOrigins.includes(origin)) {
+			return callback(null, true);
+		}
+
+		// Izinkan semua preview & production deployment domain dari Vercel (*.vercel.app)
+		if (/^https:\/\/.*\.vercel\.app$/.test(origin)) {
+			return callback(null, true);
+		}
+
+		callback(new Error(`Origin ${origin} not allowed by CORS`));
+	},
+	methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+	allowedHeaders: [
+		"Content-Type",
+		"Authorization",
+		"X-Requested-With",
+		"Accept",
+		"Origin",
+	],
+	exposedHeaders: ["Content-Disposition"],
+	credentials: true,
+	maxAge: 86400, // Cache preflight request selama 24 jam
+	optionsSuccessStatus: 200, // untuk browser lama
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests dengan opsi yang sama
+app.options("*", cors(corsOptions));
 
 // Middleware removed as morgan and custom logger already handle this
 
