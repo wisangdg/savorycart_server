@@ -7,10 +7,19 @@ const fs = require("fs");
 const path = require("path");
 const config = require("../config");
 
-// Buat direktori logs jika belum ada
+// Buat direktori logs jika belum ada (hanya jika diizinkan / bukan serverless read-only)
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+let canWriteLogs = !isServerless;
+
 const logsDir = path.join(config.rootPath, "logs");
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+if (canWriteLogs) {
+  try {
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+  } catch (err) {
+    canWriteLogs = false;
+  }
 }
 
 // Path file log
@@ -22,39 +31,55 @@ const MAX_LOG_SIZE = 10 * 1024 * 1024;
 
 // Fungsi untuk memeriksa ukuran file dan melakukan rotasi jika perlu
 const checkAndRotateLogFile = (filePath) => {
-  if (!fs.existsSync(filePath)) {
+  if (!canWriteLogs) {
     return;
   }
 
-  const stats = fs.statSync(filePath);
-  if (stats.size >= MAX_LOG_SIZE) {
-    // Buat nama file backup dengan timestamp
-    const timestamp = new Date().toISOString().replace(/:/g, "-");
-    const backupPath = `${filePath}.${timestamp}`;
+  try {
+    if (!fs.existsSync(filePath)) {
+      return;
+    }
 
-    // Rename file log saat ini menjadi file backup
-    fs.renameSync(filePath, backupPath);
+    const stats = fs.statSync(filePath);
+    if (stats.size >= MAX_LOG_SIZE) {
+      // Buat nama file backup dengan timestamp
+      const timestamp = new Date().toISOString().replace(/:/g, "-");
+      const backupPath = `${filePath}.${timestamp}`;
 
-    // Buat file log baru
-    fs.writeFileSync(filePath, "", { encoding: "utf8" });
+      // Rename file log saat ini menjadi file backup
+      fs.renameSync(filePath, backupPath);
 
-    console.log(`Log rotated: ${filePath} -> ${backupPath}`);
+      // Buat file log baru
+      fs.writeFileSync(filePath, "", { encoding: "utf8" });
+
+      console.log(`Log rotated: ${filePath} -> ${backupPath}`);
+    }
+  } catch (err) {
+    canWriteLogs = false;
   }
 };
 
 // Fungsi untuk menulis log ke file
 const writeToFile = (filePath, data) => {
-  // Periksa dan rotasi file jika perlu
-  checkAndRotateLogFile(filePath);
+  if (!canWriteLogs) {
+    return;
+  }
 
-  const logEntry =
-    typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  try {
+    // Periksa dan rotasi file jika perlu
+    checkAndRotateLogFile(filePath);
 
-  fs.appendFile(filePath, `${logEntry}\n`, { encoding: "utf8" }, (err) => {
-    if (err) {
-      console.error("Error writing to log file:", err);
-    }
-  });
+    const logEntry =
+      typeof data === "string" ? data : JSON.stringify(data, null, 2);
+
+    fs.appendFile(filePath, `${logEntry}\n`, { encoding: "utf8" }, (err) => {
+      if (err) {
+        console.error("Error writing to log file:", err);
+      }
+    });
+  } catch (err) {
+    canWriteLogs = false;
+  }
 };
 
 // Fungsi untuk format log

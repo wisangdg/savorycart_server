@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const sharp = require('sharp');
 const config = require('../config');
 
@@ -38,9 +39,16 @@ const imageOptimizer = async (req, res, next) => {
     }
 
     // Create cache directory if it doesn't exist
-    const cacheDir = path.join(config.rootPath, 'public', 'cache', 'images');
-    if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { recursive: true });
+    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const cacheDir = isServerless
+      ? path.join(os.tmpdir(), 'cache', 'images')
+      : path.join(config.rootPath, 'public', 'cache', 'images');
+    try {
+      if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+      }
+    } catch (mkdirErr) {
+      // Ignore directory creation error in restricted filesystems
     }
 
     // Generate cache key and path
@@ -84,7 +92,11 @@ const imageOptimizer = async (req, res, next) => {
     
     // Process and save to cache
     const optimizedImage = await imageProcessor.toBuffer();
-    fs.writeFileSync(cachePath, optimizedImage);
+    try {
+      fs.writeFileSync(cachePath, optimizedImage);
+    } catch (writeErr) {
+      // Ignore cache write error if filesystem is restricted
+    }
     
     // Send optimized image
     res.type(`image/${fileExt}`);
