@@ -80,20 +80,32 @@ app.use(
 	}),
 );
 
+const db = require("./database/index.js");
+
 // Lightweight /api/ping health-check BEFORE auth & DB dependent middlewares
 // so that the frontend can still know the server process is alive even if DB is down
-app.get("/api/ping", function (req, res) {
+app.get("/api/ping", async function (req, res) {
+	if (mongoose.connection.readyState !== 1 && typeof db.connectDb === "function") {
+		await db.connectDb();
+	}
 	res.json({
 		status: "ok",
 		message: "Server is running",
 		db: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+		readyState: mongoose.connection.readyState,
+		dbError: typeof db.getLastError === "function" ? db.getLastError() : null,
 		timestamp: new Date().toISOString(),
 	});
 });
 
-// Simple DB health guard – if database not connected yet, short‑circuit data routes
-function dbHealthGuard(req, res, next) {
-	// readyState: 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+// Simple DB health guard – if database not connected yet, try connecting or short‑circuit data routes
+async function dbHealthGuard(req, res, next) {
+	if (mongoose.connection.readyState === 1) return next();
+
+	if (typeof db.connectDb === "function") {
+		await db.connectDb();
+	}
+
 	const state = mongoose.connection.readyState;
 	if (state === 1) return next();
 	if (state === 2) {
@@ -107,6 +119,7 @@ function dbHealthGuard(req, res, next) {
 		error: 1,
 		code: "DB_UNAVAILABLE",
 		message: "Database is not available",
+		details: typeof db.getLastError === "function" ? db.getLastError() : undefined,
 	});
 }
 
